@@ -6,7 +6,8 @@
     "type": "module",
     "scripts": {
         "start": "node server.js",
-        "dev": "node server.js"
+        "dev": "node server.js",
+        "build": "echo 'No build step needed'"
     },
     "dependencies": {
         "archiver": "^7.0.1",
