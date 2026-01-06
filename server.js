@@ -11,7 +11,6 @@ import crypto from 'crypto';
 import { PDFDocument } from 'pdf-lib';
 import nodemailer from 'nodemailer';
 
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -208,8 +207,6 @@ async function composeImageWithElements(modelPath, outPath, elements) {
   // Basic PDF handling (placeholder for real rendering)
   if (ext === '.pdf') {
     console.log("PDF Model detected - Sharp doesn't support rendering PDF directly without system deps.");
-    // In a production env, we'd use something like pdf-to-img.
-    // For this demo, we'll try to process if it's actually an image renamed or just fail gracefully.
   }
 
   const img = sharp(modelBuffer);
@@ -336,18 +333,30 @@ app.get('/api/download/:sid', (req, res) => {
 
 app.post('/api/contact', express.json(), async (req, res) => {
   const { name, email, message } = req.body;
+  console.log(`[Contact] Reçu message de ${email}`);
 
   if (!message) {
     return res.status(400).json({ error: 'Le message est requis.' });
   }
 
   try {
+    const pass = (process.env.EMAIL_PASS || '').replace(/\s+/g, '');
+    if (!pass) {
+      console.error('[Contact] EMAIL_PASS is missing');
+      return res.status(500).json({ error: 'Configuration serveur incomplète (EMAIL_PASS).' });
+    }
+
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
       auth: {
         user: process.env.EMAIL_USER || 'galileokazadi45@gmail.com',
-        pass: process.env.EMAIL_PASS,
+        pass: pass,
       },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 15000,
     });
 
     const mailOptions = {
@@ -358,14 +367,15 @@ app.post('/api/contact', express.json(), async (req, res) => {
       replyTo: email
     };
 
+    console.log('[Contact] Tentative d\'envoi d\'email...');
     await transporter.sendMail(mailOptions);
+    console.log('[Contact] Email envoyé avec succès');
     res.json({ success: true, message: 'Message envoyé avec succès !' });
   } catch (error) {
-    console.error('Email error:', error);
-    res.status(500).json({ error: 'Erreur lors de l\'envoi du message.' });
+    console.error('[Contact] Erreur email:', error.message);
+    res.status(500).json({ error: 'Erreur lors de l\'envoi du message: ' + error.message });
   }
 });
-
 
 app.listen(port, () => {
   console.log(`Namster Premium server running at http://localhost:${port}`);
