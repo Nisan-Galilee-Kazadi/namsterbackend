@@ -9,7 +9,6 @@ import mammoth from 'mammoth';
 import archiver from 'archiver';
 import crypto from 'crypto';
 import { PDFDocument } from 'pdf-lib';
-import nodemailer from 'nodemailer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -231,8 +230,6 @@ app.post('/api/test', express.json(), async (req, res) => {
     if (useTable && tx !== null && ty !== null) {
       elements.push({ text: firstEntry.table || '01', x: tx, y: ty, fontFamily, fontSize, color });
     }
-    const outDir = path.join(workDir, sessionId);
-    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     const outPath = path.join(outDir, 'test.png');
     await composeImageWithElements(s.modelPath, outPath, elements);
     s.cleanup.push(outDir);
@@ -302,42 +299,37 @@ app.post('/api/contact', express.json(), async (req, res) => {
   }
 
   try {
-    const pass = (process.env.EMAIL_PASS || '').replace(/\s+/g, '');
-    if (!pass) {
-      console.error('[Contact] EMAIL_PASS is missing');
-      return res.status(500).json({ error: 'Configuration serveur incomplète (EMAIL_PASS).' });
-    }
+    const key = process.env.WEB3FORMS_ACCESS_KEY || "00b59229-53c0-4777-9e71-8a937ab48a60";
 
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.googlemail.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER || 'galileokazadi45@gmail.com',
-        pass: pass,
+    console.log('[Contact] Envoi via Web3Forms API...');
+
+    const response = await fetch('https://api.web3forms.com/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
-      tls: {
-        rejectUnauthorized: false
-      },
-      connectionTimeout: 30000,
-      greetingTimeout: 30000,
-      socketTimeout: 30000,
+      body: JSON.stringify({
+        access_key: key,
+        name: name,
+        email: email,
+        message: message,
+        subject: `Nouveau message Namster de ${name || 'Anonyme'}`,
+        from_name: 'Namster Premium'
+      })
     });
 
-    const mailOptions = {
-      from: email || 'noreply@namster.com',
-      to: 'galileokazadi45@gmail.com',
-      subject: `Nouveau message Namster de ${name || 'Anonyme'}`,
-      text: `Nom: ${name || 'N/A'}\nEmail: ${email || 'N/A'}\n\nMessage:\n${message}`,
-      replyTo: email
-    };
+    const data = await response.json();
 
-    console.log('[Contact] Tentative d\'envoi d\'email via SMTP alternative host...');
-    await transporter.sendMail(mailOptions);
-    console.log('[Contact] Email envoyé avec succès');
-    res.json({ success: true, message: 'Message envoyé avec succès !' });
+    if (data.success) {
+      console.log('[Contact] Message envoyé via Web3Forms avec succès');
+      res.json({ success: true, message: 'Message envoyé avec succès !' });
+    } else {
+      console.error('[Contact] Échec Web3Forms:', data.message);
+      res.status(500).json({ error: 'Erreur Web3Forms: ' + data.message });
+    }
   } catch (error) {
-    console.error('[Contact] Erreur email:', error.message);
+    console.error('[Contact] Erreur API:', error.message);
     res.status(500).json({ error: 'Erreur lors de l\'envoi du message: ' + error.message });
   }
 });
