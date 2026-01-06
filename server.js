@@ -9,6 +9,8 @@ import mammoth from 'mammoth';
 import archiver from 'archiver';
 import crypto from 'crypto';
 import { PDFDocument } from 'pdf-lib';
+import nodemailer from 'nodemailer';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -331,6 +333,39 @@ app.get('/api/download/:sid', (req, res) => {
     cleanupSession(sid);
   });
 });
+
+app.post('/api/contact', express.json(), async (req, res) => {
+  const { name, email, message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: 'Le message est requis.' });
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER || 'galileokazadi45@gmail.com',
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: email || 'noreply@namster.com',
+      to: 'galileokazadi45@gmail.com',
+      subject: `Nouveau message Namster de ${name || 'Anonyme'}`,
+      text: `Nom: ${name || 'N/A'}\nEmail: ${email || 'N/A'}\n\nMessage:\n${message}`,
+      replyTo: email
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.json({ success: true, message: 'Message envoyé avec succès !' });
+  } catch (error) {
+    console.error('Email error:', error);
+    res.status(500).json({ error: 'Erreur lors de l\'envoi du message.' });
+  }
+});
+
 
 app.listen(port, () => {
   console.log(`Namster Premium server running at http://localhost:${port}`);
