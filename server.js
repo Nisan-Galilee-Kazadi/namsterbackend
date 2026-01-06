@@ -309,16 +309,19 @@ app.post('/api/contact', express.json(), async (req, res) => {
     }
 
     const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
+      host: 'smtp.googlemail.com',
       port: 587,
-      secure: false, // true for 465, false for other ports (using STARTTLS)
+      secure: false,
       auth: {
         user: process.env.EMAIL_USER || 'galileokazadi45@gmail.com',
         pass: pass,
       },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 15000,
+      tls: {
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 30000,
+      greetingTimeout: 30000,
+      socketTimeout: 30000,
     });
 
     const mailOptions = {
@@ -329,7 +332,7 @@ app.post('/api/contact', express.json(), async (req, res) => {
       replyTo: email
     };
 
-    console.log('[Contact] Tentative d\'envoi d\'email via SMTP 587...');
+    console.log('[Contact] Tentative d\'envoi d\'email via SMTP alternative host...');
     await transporter.sendMail(mailOptions);
     console.log('[Contact] Email envoyé avec succès');
     res.json({ success: true, message: 'Message envoyé avec succès !' });
