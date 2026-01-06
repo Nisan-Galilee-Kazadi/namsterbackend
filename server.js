@@ -230,6 +230,8 @@ app.post('/api/test', express.json(), async (req, res) => {
     if (useTable && tx !== null && ty !== null) {
       elements.push({ text: firstEntry.table || '01', x: tx, y: ty, fontFamily, fontSize, color });
     }
+    const outDir = path.join(workDir, sessionId);
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     const outPath = path.join(outDir, 'test.png');
     await composeImageWithElements(s.modelPath, outPath, elements);
     s.cleanup.push(outDir);
@@ -300,8 +302,7 @@ app.post('/api/contact', express.json(), async (req, res) => {
 
   try {
     const key = process.env.WEB3FORMS_ACCESS_KEY || "00b59229-53c0-4777-9e71-8a937ab48a60";
-
-    console.log('[Contact] Envoi via Web3Forms API...');
+    console.log('[Contact] Tentative via Web3Forms API...');
 
     const response = await fetch('https://api.web3forms.com/submit', {
       method: 'POST',
@@ -311,25 +312,40 @@ app.post('/api/contact', express.json(), async (req, res) => {
       },
       body: JSON.stringify({
         access_key: key,
-        name: name,
-        email: email,
+        name: name || 'Anonyme',
+        email: email || 'noreply@namster.com',
         message: message,
-        subject: `Nouveau message Namster de ${name || 'Anonyme'}`,
+        subject: `Namster Contact: ${name || 'Anonyme'}`,
         from_name: 'Namster Premium'
       })
     });
 
-    const data = await response.json();
+    const responseText = await response.text();
+    console.log('[Contact] Web3Forms Raw Response (first 100 chars):', responseText.slice(0, 100));
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.error('[Contact] Réponse non-JSON reçue de Web3Forms. Probablement une erreur HTML.');
+      return res.status(500).json({
+        error: 'Le service de mail a renvoyé une erreur formatée en HTML.',
+        details: responseText.slice(0, 500)
+      });
+    }
 
     if (data.success) {
-      console.log('[Contact] Message envoyé via Web3Forms avec succès');
+      console.log('[Contact] Message envoyé avec succès');
       res.json({ success: true, message: 'Message envoyé avec succès !' });
     } else {
-      console.error('[Contact] Échec Web3Forms:', data.message, data);
-      res.status(500).json({ error: 'Erreur Web3Forms: ' + data.message });
+      console.error('[Contact] Échec Web3Forms:', data.message || 'Erreur inconnue');
+      res.status(500).json({
+        error: 'Échec de l\'envoi: ' + (data.message || 'Erreur API'),
+        details: data
+      });
     }
   } catch (error) {
-    console.error('[Contact] Erreur API:', error);
+    console.error('[Contact] Erreur API:', error.message);
     res.status(500).json({ error: 'Erreur lors de l\'envoi du message: ' + error.message });
   }
 });
