@@ -325,11 +325,11 @@ app.post('/api/contact', express.json(), async (req, res) => {
       console.log('[Contact] Message envoyé via Web3Forms avec succès');
       res.json({ success: true, message: 'Message envoyé avec succès !' });
     } else {
-      console.error('[Contact] Échec Web3Forms:', data.message);
+      console.error('[Contact] Échec Web3Forms:', data.message, data);
       res.status(500).json({ error: 'Erreur Web3Forms: ' + data.message });
     }
   } catch (error) {
-    console.error('[Contact] Erreur API:', error.message);
+    console.error('[Contact] Erreur API:', error);
     res.status(500).json({ error: 'Erreur lors de l\'envoi du message: ' + error.message });
   }
 });
