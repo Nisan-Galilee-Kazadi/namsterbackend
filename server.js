@@ -28,7 +28,6 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
       const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
@@ -75,7 +74,6 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
 });
 
-// In-memory session store
 const sessions = new Map();
 
 function newSession() {
@@ -105,7 +103,6 @@ function cleanupSession(id) {
 function parseNamesFromText(text) {
   const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
   return lines.map(line => {
-    // Split by '=' to separate name and table
     const parts = line.split('=');
     if (parts.length >= 2) {
       return {
@@ -113,7 +110,6 @@ function parseNamesFromText(text) {
         table: parts.slice(1).join('=').trim()
       };
     }
-    // Fallback to ':' or tab if '=' is not present
     const altParts = line.split(/[:\t]/);
     if (altParts.length >= 2) {
       return {
@@ -132,8 +128,7 @@ async function extractNamesFromFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
 
   if (ext === '.csv') {
-    const content = fs.readFileSync(filePath, 'utf8');
-    return parseNamesFromText(content);
+    return parseNamesFromText(fs.readFileSync(filePath, 'utf8'));
   }
 
   if (ext === '.xlsx' || ext === '.xls') {
@@ -143,8 +138,6 @@ async function extractNamesFromFile(filePath) {
     return data.map(row => {
       let name = String(row[0] || '').trim();
       let table = String(row[1] || '').trim();
-
-      // If second column is empty, try to parse Name = Table from the first one
       if (!table && name.includes('=')) {
         const parts = name.split('=');
         name = parts[0].trim();
@@ -154,7 +147,6 @@ async function extractNamesFromFile(filePath) {
         name = parts[0].trim();
         table = parts[1].trim();
       }
-
       return { name, table };
     }).filter(row => row.name);
   }
@@ -177,8 +169,7 @@ async function extractNamesFromFile(filePath) {
   }
 
   try {
-    const content = fs.readFileSync(filePath, 'utf8');
-    return parseNamesFromText(content);
+    return parseNamesFromText(fs.readFileSync(filePath, 'utf8'));
   } catch {
     return [];
   }
@@ -186,14 +177,12 @@ async function extractNamesFromFile(filePath) {
 
 function buildSVGOverlay(elements, width, height) {
   const safeStr = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
   const textItems = elements.map(el => {
     const ff = el.fontFamily || 'Arial';
     const fsPx = Number(el.fontSize) || 48;
     const fill = el.color || '#000000';
     return `<text x="${el.x}" y="${el.y}" style="font-family: '${ff}'; font-size: ${fsPx}px; fill: ${fill}; dominant-baseline: hanging;">${safeStr(el.text)}</text>`;
   }).join('\n');
-
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
   ${textItems}
@@ -201,19 +190,10 @@ function buildSVGOverlay(elements, width, height) {
 }
 
 async function composeImageWithElements(modelPath, outPath, elements) {
-  let modelBuffer = fs.readFileSync(modelPath);
-  const ext = path.extname(modelPath).toLowerCase();
-
-  // Basic PDF handling (placeholder for real rendering)
-  if (ext === '.pdf') {
-    console.log("PDF Model detected - Sharp doesn't support rendering PDF directly without system deps.");
-  }
-
-  const img = sharp(modelBuffer);
+  const img = sharp(fs.readFileSync(modelPath));
   const meta = await img.metadata();
   const width = meta.width || 2000;
   const height = meta.height || 1000;
-
   const svg = buildSVGOverlay(elements, width, height);
   const buffer = await img.composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).png().toBuffer();
   await fs.promises.writeFile(outPath, buffer);
@@ -228,18 +208,12 @@ app.post('/api/upload', upload.fields([
     const s = sessions.get(sid);
     const model = req.files['model']?.[0];
     const list = req.files['list']?.[0];
-
-    if (!model || !list) {
-      return res.status(400).json({ error: 'Model image and list file are required.' });
-    }
-
+    if (!model || !list) return res.status(400).json({ error: 'Model image and list file are required.' });
     s.modelPath = model.path;
     s.listPath = list.path;
     s.cleanup.push(model.path, list.path);
-
     const names = await extractNamesFromFile(s.listPath);
     s.names = names;
-
     res.json({ sessionId: sid, namesTotal: names.length });
   } catch (e) {
     console.error(e);
@@ -252,21 +226,16 @@ app.post('/api/test', express.json(), async (req, res) => {
     const { sessionId, x, y, tx, ty, useTable, fontFamily, fontSize, color } = req.body || {};
     const s = sessions.get(sessionId);
     if (!s) return res.status(400).json({ error: 'Invalid session' });
-
     const firstEntry = s.names[0] || { name: 'INVITE TEST', table: '01' };
     const elements = [{ text: firstEntry.name, x, y, fontFamily, fontSize, color }];
-
     if (useTable && tx !== null && ty !== null) {
       elements.push({ text: firstEntry.table || '01', x: tx, y: ty, fontFamily, fontSize, color });
     }
-
     const outDir = path.join(workDir, sessionId);
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     const outPath = path.join(outDir, 'test.png');
-
     await composeImageWithElements(s.modelPath, outPath, elements);
     s.cleanup.push(outDir);
-
     const data = fs.readFileSync(outPath);
     res.json({ preview: 'data:image/png;base64,' + data.toString('base64') });
   } catch (e) {
@@ -280,27 +249,21 @@ app.post('/api/generate', express.json(), async (req, res) => {
     const { sessionId, x, y, tx, ty, useTable, fontFamily, fontSize, color, offset, limit } = req.body || {};
     const s = sessions.get(sessionId);
     if (!s) return res.status(400).json({ error: 'Invalid session' });
-
     const outDir = path.join(workDir, sessionId, 'all');
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-
     const start = Math.max(0, Number(offset) || 0);
     const batchSize = Math.min(50, Number(limit) || 50);
     const endExclusive = Math.min(s.names.length, start + batchSize);
-
     for (let idx = start; idx < endExclusive; idx++) {
       const entry = s.names[idx];
       const filename = `${String(idx + 1).padStart(3, '0')}-${entry.name.replace(/[^a-z0-9_-]+/gi, '_')}.png`;
       const outPath = path.join(outDir, filename);
-
       const elements = [{ text: entry.name, x, y, fontFamily, fontSize, color }];
       if (useTable && tx !== null && ty !== null) {
         elements.push({ text: entry.table, x: tx, y: ty, fontFamily, fontSize, color });
       }
-
       await composeImageWithElements(s.modelPath, outPath, elements);
     }
-
     const zipPath = path.join(workDir, sessionId, 'invitations.zip');
     await new Promise((resolve, reject) => {
       const output = fs.createWriteStream(zipPath);
@@ -312,7 +275,6 @@ app.post('/api/generate', express.json(), async (req, res) => {
       archive.finalize();
     });
     s.cleanup.push(path.join(workDir, sessionId));
-
     res.json({ downloadUrl: `/api/download/${sessionId}`, processed: endExclusive - start, total: s.names.length });
   } catch (e) {
     console.error(e);
@@ -348,8 +310,8 @@ app.post('/api/contact', express.json(), async (req, res) => {
 
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
+      port: 587,
+      secure: false, // true for 465, false for other ports (using STARTTLS)
       auth: {
         user: process.env.EMAIL_USER || 'galileokazadi45@gmail.com',
         pass: pass,
@@ -367,7 +329,7 @@ app.post('/api/contact', express.json(), async (req, res) => {
       replyTo: email
     };
 
-    console.log('[Contact] Tentative d\'envoi d\'email...');
+    console.log('[Contact] Tentative d\'envoi d\'email via SMTP 587...');
     await transporter.sendMail(mailOptions);
     console.log('[Contact] Email envoyé avec succès');
     res.json({ success: true, message: 'Message envoyé avec succès !' });
