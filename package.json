@@ -1,0 +1,22 @@
+{
+    "name": "namster-backend",
+    "version": "1.0.0",
+    "description": "Backend api for Namster",
+    "main": "server.js",
+    "type": "module",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node server.js"
+    },
+    "dependencies": {
+        "archiver": "^7.0.1",
+        "cors": "^2.8.5",
+        "express": "^5.1.0",
+        "mammoth": "^1.10.0",
+        "multer": "^2.0.2",
+        "pdf-lib": "^1.17.1",
+        "pdf-parse": "^1.1.1",
+        "sharp": "^0.34.3",
+        "xlsx": "^0.18.5"
+    }
+}
